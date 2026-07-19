@@ -72,14 +72,14 @@ jobs:
       - name: Restart app on EC2 with PM2
         run: |
           ssh -i ~/.ssh/ci-sample-server.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} '
-            mkdir -p ~/sample-server && \
-            cd ~/sample-server && \
-            npm ci && \
-            pm2 delete sample-ci-server >/dev/null 2>&1 || true && \
-            pm2 delete sample-server >/dev/null 2>&1 || true && \
-            pkill -f "node /home/ec2-user/sample-server/dist/main.js" >/dev/null 2>&1 || true && \
-            pkill -f "node dist/main" >/dev/null 2>&1 || true && \
-            pkill -f "node /home/ec2-user/sample-server/dist/main.js" >/dev/null 2>&1 || true && \
-            pkill -f "node dist/main" >/dev/null 2>&1 || true && \
-            pm2 start npm --name sample-ci-server -- run start:prod
+            set -e;
+            mkdir -p ~/sample-server;
+            cd ~/sample-server;
+            npm ci;
+            pm2 delete sample-ci-server >/dev/null 2>&1 || true;
+            pm2 delete sample-server >/dev/null 2>&1 || true;
+            pkill -f "node /home/ec2-user/sample-server/dist/main.js" >/dev/null 2>&1 || true;
+            pkill -f "node dist/main" >/dev/null 2>&1 || true;
+            pm2 start dist/main.js --name sample-ci-server --interpreter node;
+            pm2 list
           '

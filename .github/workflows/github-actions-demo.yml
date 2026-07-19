@@ -52,8 +52,11 @@ jobs:
       - name: Prepare SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/ci-sample-server.pem
+          cat > ~/.ssh/ci-sample-server.pem <<'EOF'
+          ${{ secrets.AWS_SSH_KEY }}
+          EOF
           chmod 600 ~/.ssh/ci-sample-server.pem
+          ssh-keygen -y -f ~/.ssh/ci-sample-server.pem > /dev/null
           ssh-keyscan -H "${{ secrets.EC2_PUBLIC_IP }}" >> ~/.ssh/known_hosts
 
       - name: Copy project files to EC2
@@ -71,5 +74,5 @@ jobs:
           ssh -i ~/.ssh/ci-sample-server.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} '
             cd ~/sample-server && \
             npm ci && \
-            pm2 restart sample-ci-server || pm2 start npm --name sample-server -- run start:prod
+            pm2 restart sample-ci-server || pm2 start npm --name sample-ci-server -- run start:prod
           '

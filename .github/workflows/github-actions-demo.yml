@@ -79,5 +79,7 @@ jobs:
             pm2 delete sample-server >/dev/null 2>&1 || true && \
             pkill -f "node /home/ec2-user/sample-server/dist/main.js" >/dev/null 2>&1 || true && \
             pkill -f "node dist/main" >/dev/null 2>&1 || true && \
+            pkill -f "node /home/ec2-user/sample-server/dist/main.js" >/dev/null 2>&1 || true && \
+            pkill -f "node dist/main" >/dev/null 2>&1 || true && \
             pm2 start npm --name sample-ci-server -- run start:prod
           '

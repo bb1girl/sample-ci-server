@@ -57,11 +57,11 @@ jobs:
           EOF
           chmod 600 ~/.ssh/ci-sample-server.pem
           ssh-keygen -y -f ~/.ssh/ci-sample-server.pem > /dev/null
-          ssh-keyscan -H "${{ secrets.EC2_PUBLIC_IP }}" >> ~/.ssh/known_hosts
 
       - name: Copy project files to EC2
         run: |
-          scp -i ~/.ssh/ci-sample-server.pem -r \
+          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -i ~/.ssh/ci-sample-server.pem -r \
             dist \
             package.json \
             package-lock.json \
@@ -71,7 +71,8 @@ jobs:
 
       - name: Restart app on EC2 with PM2
         run: |
-          ssh -i ~/.ssh/ci-sample-server.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} '
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -i ~/.ssh/ci-sample-server.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} '
             set -e
             mkdir -p ~/sample-server
             cd ~/sample-server

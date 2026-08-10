@@ -27,6 +27,15 @@ jobs:
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver: docker-container
+        platforms: linux/amd64,linux/arm64
     
     - name: Build and push Docker image 
       env:
@@ -34,13 +43,32 @@ jobs:
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         IMAGE_TAG: ${{ steps.version.outputs.version }}
       run: |
-        # buildx 설정
-        docker buildx create --name mybuilder --use
+        set -e
+
+        echo "ECR_REGISTRY=${ECR_REGISTRY}"
+        echo "ECR_REPOSITORY=${ECR_REPOSITORY}"
+        echo "IMAGE_TAG=${IMAGE_TAG}"
+
+        if [ -z "${ECR_REGISTRY}" ]; then
+          echo "ECR_REGISTRY is empty. Check aws-actions/amazon-ecr-login output."
+          exit 1
+        fi
+
+        if [ -z "${ECR_REPOSITORY}" ]; then
+          echo "ECR_REPOSITORY secret is empty. Set GitHub Actions secret ECR_REPOSITORY to the repo name."
+          exit 1
+        fi
+
+        if [ -z "${IMAGE_TAG}" ]; then
+          echo "IMAGE_TAG is empty. Generate version step must emit a tag."
+          exit 1
+        fi
+
         docker buildx inspect --bootstrap
-        
+
         # 멀티 플랫폼 빌드 및 푸시
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
-          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-          -t $ECR_REGISTRY/$ECR_REPOSITORY:v2 \
+          -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
+          -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:v2" \
           --push .

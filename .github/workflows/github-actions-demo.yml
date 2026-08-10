@@ -116,7 +116,8 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
+        # EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
+        EC2_HOST : 13.125.250.129
         EC2_USERNAME: ec2-user
       run: |
         # 디버깅을 위한 환경 변수 출력
@@ -124,6 +125,8 @@ jobs:
         echo "ECR_REPOSITORY: ${ECR_REPOSITORY}"
         echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "전체 이미지 경로: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+        echo "EC2_HOST: ${EC2_HOST}"
+
 
         if [ -z "${EC2_HOST}" ]; then
           echo "EC2_HOST is empty before ssh execution."

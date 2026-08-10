@@ -1,82 +1,46 @@
-name: bb1girl CI/CD test
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: Docker Hub CI/CD
+run-name: ${{ github.actor }} is building and pushing the Docker image 🚀
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    branches: [ main ]
 
 jobs:
-  ci:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build project
-        run: npm run build
-
-      
-  deploy:
-    needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build project
-        run: npm run build
-
-      - name: Prepare SSH key
-        run: |
-          mkdir -p ~/.ssh
-          cat > ~/.ssh/ci-sample-server.pem <<'EOF'
-          ${{ secrets.AWS_SSH_KEY }}
-          EOF
-          chmod 600 ~/.ssh/ci-sample-server.pem
-          ssh-keygen -y -f ~/.ssh/ci-sample-server.pem > /dev/null
-
-      - name: Copy project files to EC2
-        run: |
-          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -i ~/.ssh/ci-sample-server.pem -r \
-            dist \
-            package.json \
-            package-lock.json \
-            tsconfig.json \
-            tsconfig.build.json \
-            ec2-user@${{ secrets.EC2_PUBLIC_IP }}:~/sample-server/
-
-      - name: Restart app on EC2 with PM2
-        run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -i ~/.ssh/ci-sample-server.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} \
-            "cd ~/sample-server && pm2 delete sample-ci-server >/dev/null 2>&1 || true && pm2 delete sample-server >/dev/null 2>&1 || true && ps -eo pid,args | grep '/home/ec2-user/sample-server/dist/main.js' | grep -v grep | awk '{print \$1}' | xargs -r kill -9 && pm2 start dist/main.js --name sample-ci-server --interpreter node"
-
-      - name: Verify PM2 status on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -i ~/.ssh/ci-sample-server.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} \
-            'pm2 list'
+    - uses: actions/checkout@v4
+    
+    - name: Generate version
+      id: version
+      run: |
+        echo "version=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Build and push Docker image 
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ steps.version.outputs.version }}
+      run: |
+        # buildx 설정
+        docker buildx create --name mybuilder --use
+        docker buildx inspect --bootstrap
+        
+        # 멀티 플랫폼 빌드 및 푸시
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:v2 \
+          --push .

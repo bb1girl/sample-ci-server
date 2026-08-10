@@ -102,7 +102,8 @@ jobs:
     
     - name: Add EC2 host to known_hosts
       env:
-        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
+        # EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
+          EC2_HOST : 13.125.250.129
       run: |
         if [ -z "${EC2_HOST}" ]; then
           echo "EC2_HOST is empty. Check GitHub Secret EC2_PUBIC_IP and its public DNS/IP value."

@@ -134,3 +134,4 @@ jobs:
           docker run -d --name sample-server -p 3000:3000 ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} && \
           docker image prune -a -f"
 
+# 

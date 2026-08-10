@@ -8,6 +8,8 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.version.outputs.version }}
 
     steps:
     - uses: actions/checkout@v4
@@ -100,16 +102,21 @@ jobs:
     
     - name: Add EC2 host to known_hosts
       env:
-        EC2_HOST: ${{ secrets.EC2_HOST }}
+        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
       run: |
-        ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+        if [ -z "${EC2_HOST}" ]; then
+          echo "EC2_HOST is empty. Check GitHub Secret EC2_PUBIC_IP and its public DNS/IP value."
+          exit 1
+        fi
+
+        ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
     
     - name: Deploy to EC2
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        EC2_HOST: ${{ secrets.EC2_PUBIC_IP}}
+        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
         EC2_USERNAME: ec2-user
       run: |
         # 디버깅을 위한 환경 변수 출력
@@ -117,6 +124,11 @@ jobs:
         echo "ECR_REPOSITORY: ${ECR_REPOSITORY}"
         echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "전체 이미지 경로: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+        if [ -z "${EC2_HOST}" ]; then
+          echo "EC2_HOST is empty before ssh execution."
+          exit 1
+        fi
 
         # AWS 자격 증명 파일 생성 및 전송
         ssh -i ~/.ssh/id_rsa $EC2_USERNAME@$EC2_HOST "mkdir -p ~/.aws"

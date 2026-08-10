@@ -116,7 +116,7 @@ jobs:
     
     - name: Add EC2 host to known_hosts
       env:
-        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
+        EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
 
       run: |
         if [ -z "${EC2_HOST}" ]; then

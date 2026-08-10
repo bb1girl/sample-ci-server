@@ -97,16 +97,23 @@ jobs:
     
     - name: Add SSH key
       run: |
-        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+        cat > ~/.ssh/id_rsa <<'EOF'
+        ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        EOF
+
         chmod 600 ~/.ssh/id_rsa
+        ssh-keygen -y -f ~/.ssh/id_rsa >/dev/null
     
     - name: Add EC2 host to known_hosts
       env:
-        # EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
-          EC2_HOST : 13.125.250.129
+        EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
+
       run: |
         if [ -z "${EC2_HOST}" ]; then
-          echo "EC2_HOST is empty. Check GitHub Secret EC2_PUBIC_IP and its public DNS/IP value."
+          echo "EC2_HOST is empty. Check the EC2 public DNS/IP value."
           exit 1
         fi
 
@@ -117,8 +124,7 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        # EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
-        EC2_HOST : 13.125.250.129
+        EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
         EC2_USERNAME: ec2-user
       run: |
         # 디버깅을 위한 환경 변수 출력
@@ -127,7 +133,6 @@ jobs:
         echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "전체 이미지 경로: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
         echo "EC2_HOST: ${EC2_HOST}"
-
 
         if [ -z "${EC2_HOST}" ]; then
           echo "EC2_HOST is empty before ssh execution."

@@ -37,7 +37,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
       with:
         driver: docker-container
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
     
     - name: Build and push Docker image 
       env:
@@ -68,9 +68,9 @@ jobs:
 
         docker buildx inspect --bootstrap
 
-        # 멀티 플랫폼 빌드 및 푸시
+        # GitHub-hosted runner의 arm64 네트워크/리소스 이슈를 피하기 위해 단일 amd64 타깃으로 빌드
         docker buildx build \
-          --platform linux/amd64,linux/arm64 \
+          --platform linux/amd64 \
           -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
           -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" \
           --push .
@@ -101,7 +101,7 @@ jobs:
         chmod 700 ~/.ssh
 
         cat > ~/.ssh/id_rsa <<'EOF'
-        ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        ${{ secrets.AWS_SSH_KEY }}
         EOF
 
         chmod 600 ~/.ssh/id_rsa
@@ -109,14 +109,14 @@ jobs:
         file ~/.ssh/id_rsa || true
 
         if ! ssh-keygen -y -f ~/.ssh/id_rsa >/dev/null 2>&1; then
-          echo "EC2_SSH_PRIVATE_KEY secret is invalid or was not written as a usable OpenSSH private key."
+          echo "AWS_SSH_KEY secret is invalid or was not written as a usable OpenSSH private key."
           echo "Expected a PEM/OpenSSH private key with BEGIN PRIVATE KEY / BEGIN OPENSSH PRIVATE KEY markers."
           exit 1
         fi
     
     - name: Add EC2 host to known_hosts
       env:
-        EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
+        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
 
       run: |
         if [ -z "${EC2_HOST}" ]; then
@@ -131,7 +131,7 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
+        EC2_HOST: ${{ secrets.EC2_PUBIC_IP }}
         EC2_USERNAME: ec2-user
       run: |
         # 디버깅을 위한 환경 변수 출력
@@ -148,20 +148,41 @@ jobs:
           echo "EC2_HOST is present"
         fi
 
+        if [ -z "${ECR_REGISTRY}" ]; then
+          echo "ECR_REGISTRY is empty before ssh execution."
+          exit 1
+        fi
+
+        if [ -z "${ECR_REPOSITORY}" ]; then
+          echo "ECR_REPOSITORY is empty before ssh execution."
+          exit 1
+        fi
+
+        if [ -z "${IMAGE_TAG}" ]; then
+          echo "IMAGE_TAG is empty before ssh execution."
+          exit 1
+        fi
+
         # AWS 자격 증명 파일 생성 및 전송
-        ssh -i ~/.ssh/id_rsa $EC2_USERNAME@$EC2_HOST "mkdir -p ~/.aws"
-        echo "[default]
-        aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        region=${{ secrets.AWS_REGION }}" | ssh -i ~/.ssh/id_rsa $EC2_USERNAME@$EC2_HOST "cat > ~/.aws/credentials"
-        
+        ssh -i ~/.ssh/id_rsa "${EC2_USERNAME}@${EC2_HOST}" "mkdir -p ~/.aws"
+        cat > /tmp/aws-credentials <<EOF
+[default]
+aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
+aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+region=${{ secrets.AWS_REGION }}
+EOF
+
+        scp -i ~/.ssh/id_rsa /tmp/aws-credentials "${EC2_USERNAME}@${EC2_HOST}:~/.aws/credentials"
+        ssh -i ~/.ssh/id_rsa "${EC2_USERNAME}@${EC2_HOST}" "chmod 600 ~/.aws/credentials && ls -la ~/.aws"
+
         # 도커 명령어 실행
-        ssh -i ~/.ssh/id_rsa $EC2_USERNAME@$EC2_HOST "\
-          source ~/.bashrc && \
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY} && \
-          docker pull ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} && \
-          docker rm -f sample-server || true && \
-          docker run -d --name sample-server -p 3000:3000 ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} && \
-          docker image prune -a -f"
+        ssh -i ~/.ssh/id_rsa "${EC2_USERNAME}@${EC2_HOST}" 'bash -s' <<REMOTE_SCRIPT
+          source ~/.bashrc
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+          docker pull ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker rm -f sample-server || true
+          docker run -d --name sample-server -p 3000:3000 ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker image prune -a -f
+REMOTE_SCRIPT
 
 # 
